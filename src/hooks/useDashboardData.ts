@@ -142,11 +142,21 @@ async function fetchInventoryData(companyId: string) {
 }
 
 async function fetchUnavailableProducts(companyId: string) {
-  const { data } = await supabase.functions.invoke("get-unavailable-products", {
-    body: { companyId },
-  });
+  try {
+    const { data, error } = await supabase.functions.invoke("get-unavailable-products", {
+      body: { companyId },
+    });
 
-  return data?.ok ? (data.unavailableProductIds || []).length : 0;
+    if (error) {
+      console.warn("Failed to fetch unavailable products:", error);
+      return 0;
+    }
+
+    return data?.ok ? (data.unavailableProductIds || []).length : 0;
+  } catch (err) {
+    console.warn("Error fetching unavailable products:", err);
+    return 0;
+  }
 }
 
 async function fetchInventoryMovements(companyId: string, periodStart: string, periodEnd: string) {
