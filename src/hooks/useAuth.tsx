@@ -39,12 +39,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .select('role')
         .eq('user_id', userId);
 
-      if (error) throw error;
+      // Se a tabela não existir ou houver erro, retorna array vazio sem travar
+      if (error) {
+        console.warn('Error fetching user roles (tabela pode não existir):', error.message);
+        setRoles([]);
+        return [];
+      }
       const userRoles = data?.map(r => r.role as AppRole) || [];
       setRoles(userRoles);
       return userRoles;
     } catch (error) {
-      console.error('Error fetching user roles:', error);
+      console.warn('Error fetching user roles:', error);
       setRoles([]);
       return [];
     }
@@ -60,7 +65,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .limit(1)
         .single();
 
-      if (staffError || !staffData) {
+      // Se a tabela não existir ou houver erro, retorna null sem travar
+      if (staffError) {
+        if (staffError.code !== 'PGRST116') { // PGRST116 = no rows returned
+          console.warn('Error fetching staff company (tabela pode não existir):', staffError.message);
+        }
+        setStaffCompany(null);
+        return null;
+      }
+
+      if (!staffData) {
         setStaffCompany(null);
         return null;
       }
@@ -79,7 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setStaffCompany(null);
       return null;
     } catch (error) {
-      console.error('Error fetching staff company:', error);
+      console.warn('Error fetching staff company:', error);
       setStaffCompany(null);
       return null;
     }
