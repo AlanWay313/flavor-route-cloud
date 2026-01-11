@@ -255,13 +255,14 @@ export function POSProductModal({ product, open, onClose, onAddToCart }: POSProd
   if (!product) return null;
 
   const handleSingleSelect = (group: OptionGroup, option: ProductOption) => {
-    const filtered = selectedOptions.filter((o) => o.groupId !== group.id);
-    
-    // Se selecionou um tamanho de açaí, atualiza o estado e limpa opções de outros tamanhos
+    // Se selecionou um tamanho de açaí, atualiza o estado e limpa TODAS as opções anteriores
     if (group.id === 'acai-size') {
       setSelectedAcaiSizeId(option.id);
-      // Limpar opções de grupos de açaí anteriores
-      const nonAcaiOptions = selectedOptions.filter((o) => !o.groupId.startsWith('acai-group-'));
+      // Limpar todas as opções de açaí (tamanho anterior + grupos de opções)
+      // Manter apenas opções que não são de açaí
+      const nonAcaiOptions = selectedOptions.filter(
+        (o) => o.groupId !== 'acai-size' && !o.groupId.startsWith('acai-group-')
+      );
       setSelectedOptions([
         ...nonAcaiOptions,
         {
@@ -275,6 +276,8 @@ export function POSProductModal({ product, open, onClose, onAddToCart }: POSProd
       return;
     }
     
+    // Para outros grupos single-select, apenas substituir a opção do mesmo grupo
+    const filtered = selectedOptions.filter((o) => o.groupId !== group.id);
     setSelectedOptions([
       ...filtered,
       {
