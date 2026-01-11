@@ -322,7 +322,8 @@ export function POSProductModal({ product, open, onClose, onAddToCart }: POSProd
   };
 
   const validateRequiredGroups = () => {
-    for (const group of optionGroups) {
+    // Validar apenas grupos visíveis (considerando tamanho de açaí selecionado)
+    for (const group of visibleOptionGroups) {
       if (group.is_required) {
         const count = getGroupSelectionCount(group.id);
         if (count < (group.min_selections || 1)) {
@@ -333,7 +334,7 @@ export function POSProductModal({ product, open, onClose, onAddToCart }: POSProd
     return true;
   };
 
-  const optionsTotal = optionGroups.reduce((groupSum, group) => {
+  const optionsTotal = visibleOptionGroups.reduce((groupSum, group) => {
     const groupSelections = selectedOptions.filter((opt) => opt.groupId === group.id);
 
     if (group.selection_type === 'multiple' && group.free_quantity_limit > 0) {
@@ -346,13 +347,18 @@ export function POSProductModal({ product, open, onClose, onAddToCart }: POSProd
 
     return groupSum + groupSelections.reduce((sum, opt) => sum + opt.priceModifier, 0);
   }, 0);
+  
+  // Para açaí, incluir o preço do tamanho selecionado
+  const acaiSizePrice = selectedOptions.find((o) => o.groupId === 'acai-size')?.priceModifier || 0;
 
-  const itemTotal = (product.price + optionsTotal) * quantity;
+  // Para açaí, usar preço do tamanho; para outros, preço do produto
+  const basePrice = isAcaiProduct ? acaiSizePrice : product.price;
+  const itemTotal = (basePrice + optionsTotal) * quantity;
 
   const handleAddToCart = () => {
     if (!validateRequiredGroups()) return;
     
-    const calculatedPrice = product.price + optionsTotal;
+    const calculatedPrice = basePrice + optionsTotal;
     onAddToCart(product, quantity, selectedOptions, notes, calculatedPrice);
     handleClose();
   };
@@ -371,18 +377,34 @@ export function POSProductModal({ product, open, onClose, onAddToCart }: POSProd
   const formatCurrency = (value: number) =>
     value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
+  // Verificar se há opções visíveis (considerando filtro de tamanho açaí)
+  const hasVisibleOptions = visibleOptionGroups.length > 0;
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-md max-h-[90vh] overflow-hidden flex flex-col" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between pr-6">
             <span className="truncate">{product.name}</span>
-            <span className="text-primary font-bold">{formatCurrency(product.price)}</span>
+            {!isAcaiProduct && (
+              <span className="text-primary font-bold">{formatCurrency(product.price)}</span>
+            )}
           </DialogTitle>
         </DialogHeader>
 
         <ScrollArea className="flex-1 -mx-6 px-6">
           <div className="space-y-4 pb-4">
+            {/* Imagem do produto */}
+            {product.image_url && (
+              <div className="relative w-full h-32 rounded-lg overflow-hidden bg-muted">
+                <img
+                  src={product.image_url}
+                  alt={product.name}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            )}
+
             {product.description && (
               <p className="text-sm text-muted-foreground">{product.description}</p>
             )}
@@ -391,9 +413,9 @@ export function POSProductModal({ product, open, onClose, onAddToCart }: POSProd
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
-            ) : hasOptions ? (
+            ) : hasVisibleOptions ? (
               <div className="space-y-6">
-                {optionGroups.map((group) => (
+                {visibleOptionGroups.map((group) => (
                   <div key={group.id} className="space-y-3">
                     <div className="flex items-center justify-between">
                       <div>
@@ -436,8 +458,8 @@ export function POSProductModal({ product, open, onClose, onAddToCart }: POSProd
                             className="flex items-center justify-between p-3 rounded-lg border border-border hover:border-primary/30 cursor-pointer transition-colors"
                           >
                             <div className="flex items-center gap-3">
-                              <RadioGroupItem value={option.id} id={option.id} />
-                              <Label htmlFor={option.id} className="cursor-pointer">
+                              <RadioGroupItem value={option.id} id={`pos-${option.id}`} />
+                              <Label htmlFor={`pos-${option.id}`} className="cursor-pointer">
                                 {option.name}
                               </Label>
                             </div>

@@ -48,6 +48,7 @@ import { CustomerCountModal } from '@/components/tables/CustomerCountModal';
 import { MyTicketsModal } from '@/components/menu/MyTicketsModal';
 import { usePizzaConfig } from '@/hooks/usePizzaConfig';
 import { useSmartSuggestions } from '@/hooks/useSmartSuggestions';
+import { useAcaiOptionsCache } from '@/hooks/useAcaiOptionsCache';
 import { cn, isLightColor } from '@/lib/utils';
 import { checkStoreOpen, formatTodayHours } from '@/lib/storeHours';
 import { filterCategoriesByDayPeriod, DayPeriod, CategoryDayPeriod } from '@/lib/dayPeriods';
@@ -451,6 +452,9 @@ function PublicMenuContent() {
   // Pizza config
   const pizzaConfig = usePizzaConfig(company?.id || null);
   const { favoriteProductIds, toggleFavorite } = useFavorites(company?.id || null);
+  
+  // Cache de opções de açaí para evitar delay no modal
+  const acaiCache = useAcaiOptionsCache();
 
   // SEO / Open Graph meta tags para compartilhamento do cardápio
   useEffect(() => {
@@ -937,6 +941,11 @@ function PublicMenuContent() {
         });
 
         setAcaiCategoryBasePrices(map);
+
+        // Pré-carregar opções de açaí em cache para não ter delay no modal
+        if (catIds.length > 0) {
+          acaiCache.preloadAcaiOptions(catIds);
+        }
       } catch (err) {
         console.error('Erro inesperado ao carregar dados de açaí:', err);
       }
