@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/tooltip';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useAcaiOptionsCache } from '@/hooks/useAcaiOptionsCache';
 
 interface ProductOption {
   id: string;
@@ -81,6 +82,7 @@ interface ProductIngredient {
 
 export function ProductModal({ product, open, onClose }: ProductModalProps) {
   const { addItem } = useCart();
+  const acaiCache = useAcaiOptionsCache();
   const [quantity, setQuantity] = useState(1);
   const [notes, setNotes] = useState('');
   const [selectedOptions, setSelectedOptions] = useState<SelectedOption[]>([]);
@@ -264,31 +266,48 @@ export function ProductModal({ product, open, onClose }: ProductModalProps) {
       }
 
       // Adicionar tamanhos de açaí se a categoria tiver configurados
-      if (hasAcaiSizes) {
-        // Buscar grupos de opções para todos os tamanhos de açaí
-        const acaiSizeIds = (acaiSizesData as any[]).map((s) => s.id);
+      if (hasAcaiSizes && categoryId) {
+        // Tentar usar cache primeiro
+        const cachedData = acaiCache.getAcaiCache(categoryId);
         
-        const { data: acaiOptionGroupsData, error: acaiGroupsError } = await supabase
-          .from('acai_size_option_groups')
-          .select('*')
-          .in('size_id', acaiSizeIds)
-          .order('sort_order');
+        let acaiSizesForGroups: any[];
+        let acaiOptionGroupsData: any[];
+        let acaiOptionsData: any[];
 
-        if (acaiGroupsError) throw acaiGroupsError;
-
-        // Buscar opções para todos os grupos
-        let acaiOptionsData: any[] = [];
-        if (acaiOptionGroupsData && acaiOptionGroupsData.length > 0) {
-          const groupIds = acaiOptionGroupsData.map((g: any) => g.id);
-          const { data: optData, error: optError } = await supabase
-            .from('acai_size_options')
+        if (cachedData && cachedData.sizes.length > 0) {
+          // Usar dados do cache
+          acaiSizesForGroups = cachedData.sizes;
+          acaiOptionGroupsData = cachedData.optionGroups;
+          acaiOptionsData = cachedData.options;
+        } else {
+          // Fallback: buscar do banco de dados
+          acaiSizesForGroups = acaiSizesData as any[];
+          const acaiSizeIds = acaiSizesForGroups.map((s) => s.id);
+          
+          const { data: groupsFromDb, error: acaiGroupsError } = await supabase
+            .from('acai_size_option_groups')
             .select('*')
-            .in('group_id', groupIds)
-            .eq('is_available', true)
+            .in('size_id', acaiSizeIds)
             .order('sort_order');
 
-          if (optError) throw optError;
-          acaiOptionsData = optData || [];
+          if (acaiGroupsError) throw acaiGroupsError;
+          acaiOptionGroupsData = groupsFromDb || [];
+
+          // Buscar opções para todos os grupos
+          if (acaiOptionGroupsData.length > 0) {
+            const groupIds = acaiOptionGroupsData.map((g: any) => g.id);
+            const { data: optData, error: optError } = await supabase
+              .from('acai_size_options')
+              .select('*')
+              .in('group_id', groupIds)
+              .eq('is_available', true)
+              .order('sort_order');
+
+            if (optError) throw optError;
+            acaiOptionsData = optData || [];
+          } else {
+            acaiOptionsData = [];
+          }
         }
 
         // Criar grupo de tamanho de açaí
@@ -303,7 +322,7 @@ export function ProductModal({ product, open, onClose }: ProductModalProps) {
           sort_order: -2, // Tamanho sempre primeiro
           free_quantity_limit: 0,
           extra_unit_price: 0,
-          options: (acaiSizesData as any[]).map((size) => ({
+          options: acaiSizesForGroups.map((size) => ({
             id: size.id,
             name: size.name,
             price_modifier: Number(size.base_price ?? 0),
@@ -318,14 +337,15 @@ export function ProductModal({ product, open, onClose }: ProductModalProps) {
 
         // Agrupar opções de açaí por grupo
         const acaiGroupsBySize: Record<string, any[]> = {};
-        (acaiOptionGroupsData || []).forEach((g: any) => {
-          if (!acaiGroupsBySize[g.size_id]) acaiGroupsBySize[g.size_id] = [];
-          acaiGroupsBySize[g.size_id].push(g);
+        acaiOptionGroupsData.forEach((g: any) => {
+          const sizeId = g.size_id;
+          if (!acaiGroupsBySize[sizeId]) acaiGroupsBySize[sizeId] = [];
+          acaiGroupsBySize[sizeId].push(g);
         });
 
         // Para cada tamanho de açaí, criar grupos de opções marcados com o size_id
         // Esses grupos serão filtrados dinamicamente baseado no tamanho selecionado
-        (acaiSizesData as any[]).forEach((size, sizeIndex) => {
+        acaiSizesForGroups.forEach((size, sizeIndex) => {
           const sizeGroups = acaiGroupsBySize[size.id] || [];
           
           sizeGroups.forEach((group, groupIndex) => {
