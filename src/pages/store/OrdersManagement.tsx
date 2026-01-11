@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Clock,
@@ -29,6 +29,8 @@ import {
   ListOrdered,
 } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import { RealtimeConnectionAlert } from '@/components/layout/RealtimeConnectionAlert';
+import { useRealtimeHealthMonitor } from '@/hooks/useRealtimeHealthMonitor';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -250,6 +252,44 @@ export default function OrdersManagement() {
     state: '',
     zip_code: '',
     reference: '',
+  });
+
+  // Função de reload para o fallback de polling
+  const reloadOrders = useCallback(async () => {
+    if (!companyId) return;
+    
+    console.log('[OrdersManagement] Polling fallback - recarregando pedidos');
+    try {
+      const { data: ordersData, error: ordersError } = await supabase
+        .from('orders')
+        .select(`
+          *,
+          order_items (*),
+          customer_addresses:delivery_address_id (*),
+          coupons:coupon_id (id, code, discount_type, discount_value),
+          customer_referral_codes:referral_code_id (id, code, customers:customer_id (name))
+        `)
+        .eq('company_id', companyId)
+        .order('created_at', { ascending: false });
+
+      if (!ordersError && ordersData) {
+        setOrders(ordersData);
+      }
+    } catch (error) {
+      console.error('[OrdersManagement] Erro no polling:', error);
+    }
+  }, [companyId]);
+
+  // Hook de monitoramento de saúde da conexão realtime
+  const {
+    connectionStatus,
+    isPollingActive,
+    reconnectAttempts,
+    forceReconnect,
+  } = useRealtimeHealthMonitor({
+    companyId,
+    onReconnect: reloadOrders,
+    pollingIntervalMs: 30000, // 30 segundos
   });
 
   useEffect(() => {
@@ -1272,6 +1312,14 @@ export default function OrdersManagement() {
 
   return (
     <DashboardLayout>
+      {/* Alerta de status da conexão realtime */}
+      <RealtimeConnectionAlert
+        connectionStatus={connectionStatus}
+        isPollingActive={isPollingActive}
+        reconnectAttempts={reconnectAttempts}
+        onForceReconnect={forceReconnect}
+      />
+
       <div className="space-y-6 animate-fade-in">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
