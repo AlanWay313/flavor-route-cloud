@@ -240,9 +240,21 @@ function PublicMenuContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Run only once on mount
   
+  // Ref para evitar múltiplas verificações de sessão
+  const tableSessionCheckRef = useRef<string | null>(null);
+  
   // Check if session token is valid
   useEffect(() => {
+    // Criar uma chave única para esta verificação
+    const checkKey = `${sessionToken || ''}-${tableNumber || ''}-${slug || ''}`;
+    
+    // Evitar verificação duplicada
+    if (tableSessionCheckRef.current === checkKey) return;
+    
     const checkTableSession = async () => {
+      // Marcar que estamos verificando esta combinação
+      tableSessionCheckRef.current = checkKey;
+      
       // If using new token-based system
       if (sessionToken) {
         setCheckingTableSession(true);
@@ -303,6 +315,10 @@ function PublicMenuContent() {
             newUrl.searchParams.delete('mesa');
             newUrl.searchParams.set('sessao', data.sessionToken);
             window.history.replaceState({}, '', newUrl.toString());
+            
+            // Atualizar a ref antes de mudar o estado para evitar loop
+            tableSessionCheckRef.current = `${data.sessionToken}-${data.tableNumber}-${slug}`;
+            
             setSessionToken(data.sessionToken);
             setTableNumber(data.tableNumber);
             setTableSessionError(null);
@@ -509,15 +525,23 @@ function PublicMenuContent() {
     }
   }, [company]);
 
-  // Ref para evitar carregamento duplicado
+  // Ref para evitar carregamento duplicado e loops infinitos
   const loadedSlugRef = useRef<string | null>(null);
+  const isLoadingRef = useRef(false);
   
   useEffect(() => {
-    if (slug && slug !== loadedSlugRef.current) {
-      loadedSlugRef.current = slug;
-      setCompanySlug(slug);
-      loadCompanyData();
-    }
+    // Verificações rigorosas para evitar recarregamento em loop
+    if (!slug) return;
+    if (slug === loadedSlugRef.current) return;
+    if (isLoadingRef.current) return;
+    
+    loadedSlugRef.current = slug;
+    isLoadingRef.current = true;
+    setCompanySlug(slug);
+    
+    loadCompanyData().finally(() => {
+      isLoadingRef.current = false;
+    });
   }, [slug]);
 
   // Check if customer has stored email and customer ID
